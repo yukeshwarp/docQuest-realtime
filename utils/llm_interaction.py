@@ -6,9 +6,34 @@ import logging
 import time
 import requests
 import random
-
+import re
+import nltk
+from nltk.corpus import stopwords
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
+
+
+# Ensure NLTK stopwords are downloaded
+nltk.download('stopwords', quiet=True)
+
+def preprocess_text(text):
+    """
+    Preprocess the text by removing blank spaces, stopwords, and punctuations.
+    """
+    # Convert to lowercase
+    text = text.lower()
+
+    # Remove punctuation and special characters
+    text = re.sub(r'[^\w\s]', '', text)
+
+    # Remove multiple spaces and strip leading/trailing spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Remove stopwords
+    stop_words = set(stopwords.words('english'))
+    text = ' '.join([word for word in text.split() if word not in stop_words])
+
+    return text
 
 def get_headers():
     """Generate common headers for the API requests."""
@@ -71,13 +96,14 @@ def generate_system_prompt(document_content):
     to summarize the document content.
     """
     headers = get_headers()
+    preprocessed_content = preprocess_text(document_content)
     data = {
         "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant that serves the task given."},
             {"role": "user", "content":
              f"""You are provided with a document. Based on its content, extract and identify the following details:
-            Document_content: {document_content}
+            Document_content: {preprocessed_content}
 
             1. **Domain**: Identify the specific domain or field of expertise the document is focused on. Examples include technology, finance, healthcare, law, etc.
             2. **Subject Matter**: Determine the main topic or focus of the document. This could be a detailed concept, theory, or subject within the domain.
@@ -142,7 +168,8 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
     Implements exponential backoff with jitter to handle timeout errors.
     """
     headers = get_headers()
-    
+    preprocessed_page_text = preprocess_text(page_text)
+    preprocessed_previous_summary = preprocess_text(previous_summary)
     # Generate the system prompt based on the document content
     system_prompt = system_prompt
     
@@ -150,8 +177,8 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
         f"Please rewrite the following page content from (Page {page_number}) along with context from the previous page summary "
         f"to make them concise and well-structured. Maintain proper listing and referencing of the contents if present."
         f"Do not add any new information or make assumptions. Keep the meaning accurate and the language clear.\n\n"
-        f"Previous page summary: {previous_summary}\n\n"
-        f"Current page content:\n{page_text}\n"
+        f"Previous page summary: {preprocessed_previous_summary}\n\n"
+        f"Current page content:\n{preprocessed_page_text}\n"
     )
 
     data = {
@@ -196,8 +223,8 @@ def ask_question(documents, question, chat_history):
     for doc_name, doc_data in documents.items():
         combined_content += f"\nDocument: {doc_name}\n"  # Add document name for clarity
         for page in doc_data["pages"]:
-            page_summary = page['text_summary']
-            page_full_text = page.get('full_text', 'No text available')  # Include full text
+            page_summary = preprocess_text(page['text_summary'])  # Preprocess summary
+            page_full_text = preprocess_text(page.get('full_text', 'No text available'))  # Preprocess full text
 
             image_explanation = "\n".join(
                 f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
@@ -209,12 +236,16 @@ def ask_question(documents, question, chat_history):
                 f"Image Analysis: {image_explanation}\n\n"
             )
 
-    # Format the chat history into a conversation format
+    # Preprocess the chat history as well
     conversation_history = "".join(
-        f"User: {chat['question']}\nAssistant: {chat['answer']}\n" for chat in chat_history
+        f"User: {preprocess_text(chat['question'])}\nAssistant: {preprocess_text(chat['answer'])}\n"
+        for chat in chat_history
     )
 
-    # Prepare the prompt message with document name references
+    # Preprocess the question
+    preprocessed_question = preprocess_text(question)
+
+    # Prepare the prompt message with preprocessed content
     prompt_message = (
         f"""
     You are given the following content from multiple documents:
@@ -231,7 +262,7 @@ def ask_question(documents, question, chat_history):
 
     Include references to the document name and page number(s) where the information was found.
 
-    Question: {question}
+    Question: {preprocessed_question}
     """
     )
 
@@ -259,4 +290,5 @@ def ask_question(documents, question, chat_history):
     except requests.exceptions.RequestException as e:
         logging.error(f"Error answering question '{question}': {e}")
         raise Exception(f"Unable to answer the question due to network issues or API error.")
+
 
