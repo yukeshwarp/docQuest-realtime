@@ -36,8 +36,6 @@ def reset_session():
 
 # Sidebar for file upload and document information
 with st.sidebar:
-
-    # File uploader
     uploaded_files = st.file_uploader(
         "",
         type=["pdf", "docx", "xlsx", "pptx"],
@@ -45,18 +43,9 @@ with st.sidebar:
         help="Supports PDF, DOCX, XLSX, and PPTX formats.",
     )
 
-    # Check if the uploaded files have changed
-    uploaded_filenames = [file.name for file in uploaded_files] if uploaded_files else []
-    previous_filenames = st.session_state.uploaded_files
-
-    # Detect removed files and reset session state if needed
-    if set(uploaded_filenames) != set(previous_filenames):
-        reset_session()
-        st.session_state.uploaded_files = uploaded_filenames
-
     if uploaded_files:
         new_files = []
-        for uploaded_file in uploaded_files:
+        for index, uploaded_file in enumerate(uploaded_files):
             if uploaded_file.name not in st.session_state.documents:
                 new_files.append(uploaded_file)
             else:
@@ -69,21 +58,20 @@ with st.sidebar:
             total_files = len(new_files)
 
             # Spinner while processing documents
-            with st.spinner("Learning your documents..."):
+            with st.spinner("Learning about your document(s)..."):
                 # Process files in pairs using ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=2) as executor:
-                    future_to_file = {executor.submit(process_pdf_pages, uploaded_file): uploaded_file for uploaded_file in new_files}
+                    future_to_file = {
+                        executor.submit(process_pdf_pages, uploaded_file, first_file=(index == 0)): uploaded_file 
+                        for index, uploaded_file in enumerate(new_files)
+                    }
 
                     for i, future in enumerate(as_completed(future_to_file)):
                         uploaded_file = future_to_file[future]
                         try:
                             # Get the result from the future
-                            document_data, system_prompt = future.result()  # Unpack document data and system prompt
+                            document_data = future.result()
                             st.session_state.documents[uploaded_file.name] = document_data
-
-                            # Display system prompt in the UI
-                            st.write(f"System Prompt for **{uploaded_file.name}**:")
-                            st.code(system_prompt, language='markdown')
 
                             st.success(f"{uploaded_file.name} processed successfully!")
                         except Exception as e:
@@ -94,7 +82,7 @@ with st.sidebar:
                     
             progress_text.text("Processing complete.")
             progress_bar.empty()
-
+            
     if st.session_state.documents:
         download_data = json.dumps(st.session_state.documents, indent=4)
         st.download_button(
@@ -105,6 +93,7 @@ with st.sidebar:
         )
 
 # Main Page - Chat Interface
+st.image("logoD.png", width = 200)
 st.title("docQuest")
 st.subheader("Unveil the Essence, Compare Easily, Analyze Smartly", divider="orange")
 if st.session_state.documents:

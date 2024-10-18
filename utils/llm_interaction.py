@@ -3,6 +3,9 @@ from dotenv import load_dotenv
 import requests
 from utils.config import azure_endpoint, api_key, api_version, model
 import logging
+import time
+import requests
+import random
 
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -14,10 +17,9 @@ def get_headers():
         "api-key": api_key
     }
 
-import time
-import requests
 
-def get_image_explanation(base64_image, retries=3, initial_delay=2):
+
+def get_image_explanation(base64_image, retries=5, initial_delay=2):
     """Get image explanation from OpenAI API with exponential backoff."""
     headers = get_headers()
     data = {
@@ -27,7 +29,7 @@ def get_image_explanation(base64_image, retries=3, initial_delay=2):
             {"role": "user", "content": [
                 {
                     "type": "text",
-                    "text": "Explain the content of this image. The explanation should be concise and semantically meaningful. Do not make assumptions about the specification of the image and be accurate in your explanation."
+                    "text": "Explain the contents and figures or tables if present of this image of a document page. The explanation should be concise and semantically meaningful. Do not make assumptions about the specification and be accurate in your explanation."
                 },
                 {
                     "type": "image_url",
@@ -43,7 +45,7 @@ def get_image_explanation(base64_image, retries=3, initial_delay=2):
     # Exponential backoff retry mechanism
     for attempt in range(retries):
         try:
-            response = requests.post(url, headers=headers, json=data, timeout=50)  # Adjusted timeout
+            response = requests.post(url, headers=headers, json=data, timeout=30)  # Adjusted timeout
             response.raise_for_status()  # Raise HTTPError for bad responses
             return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
         
@@ -134,9 +136,10 @@ def generate_system_prompt(document_content):
         return f"Error: Unable to generate system prompt due to network issues or API error."
 
 
-def summarize_page(page_text, previous_summary, page_number, system_prompt):
+def summarize_page(page_text, previous_summary, page_number, system_prompt, max_retries=5, base_delay=1, max_delay=32):
     """
     Summarize a single page's text using LLM, and generate a system prompt based on the document content.
+    Implements exponential backoff with jitter to handle timeout errors.
     """
     headers = get_headers()
     
@@ -159,32 +162,43 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt):
         ],
         "temperature": 0.0
     }
-
-    try:
-        response = requests.post(
-            f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
-            headers=headers,
-            json=data,
-            timeout=20
-        )
-        response.raise_for_status()
-        return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No summary provided.").strip()
     
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error summarizing page {page_number}: {e}")
-        return f"Error: Unable to summarize page {page_number} due to network issues or API error."
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            response = requests.post(
+                f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
+                headers=headers,
+                json=data,
+                timeout=50
+            )
+            response.raise_for_status()
+            return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No summary provided.").strip()
+        
+        except requests.exceptions.RequestException as e:
+            attempt += 1
+            if attempt >= max_retries:
+                logging.error(f"Error summarizing page {page_number}: {e}")
+                return f"Error: Unable to summarize page {page_number} due to network issues or API error."
+
+            # Calculate exponential backoff with jitter
+            delay = min(max_delay, base_delay * (2 ** attempt))  # Exponential backoff
+            jitter = random.uniform(0, delay)  # Add jitter for randomness
+            logging.warning(f"Retrying in {jitter:.2f} seconds (attempt {attempt}) due to error: {e}")
+            time.sleep(jitter)
 
 
 def ask_question(documents, question, chat_history):
     """Answer a question based on the full text, summarized content of multiple PDFs, and chat history."""
     combined_content = ""
 
-    # Combine document full texts, summaries, and image analyses
+    # Combine document full texts, summaries, and image analyses with document names
     for doc_name, doc_data in documents.items():
+        combined_content += f"\nDocument: {doc_name}\n"  # Add document name for clarity
         for page in doc_data["pages"]:
             page_summary = page['text_summary']
             page_full_text = page.get('full_text', 'No text available')  # Include full text
-            
+
             image_explanation = "\n".join(
                 f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
             ) if page["image_analysis"] else "No image analysis."
@@ -201,10 +215,10 @@ def ask_question(documents, question, chat_history):
         f"User: {chat['question']}\nAssistant: {chat['answer']}\n" for chat in chat_history
     )
 
-    # Prepare the prompt message
+    # Prepare the prompt message with document name references
     prompt_message = (
         f"""
-    You are given the following content:
+    You are given the following content from multiple documents:
 
     ---
     {combined_content}
@@ -215,8 +229,8 @@ def ask_question(documents, question, chat_history):
     Carefully verify all details from the content and do not generate any information that is not explicitly mentioned in it.
     If the answer cannot be determined from the content, explicitly state that the information is not available.
     Ensure the response is clearly formatted for readability.
-    
-    At the end of the response, include references to the document name and page number(s) where the information was found.
+
+    Include references to the document name and page number(s) where the information was found.
 
     Question: {question}
     """
@@ -238,7 +252,7 @@ def ask_question(documents, question, chat_history):
             f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
             headers=headers,
             json=data,
-            timeout=20  # Add timeout for API request
+            timeout=60  # Add timeout for API request
         )
         response.raise_for_status()  # Raise HTTPError for bad responses
         return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No answer provided.").strip()
@@ -246,3 +260,4 @@ def ask_question(documents, question, chat_history):
     except requests.exceptions.RequestException as e:
         logging.error(f"Error answering question '{question}': {e}")
         raise Exception(f"Unable to answer the question due to network issues or API error.")
+
