@@ -127,7 +127,7 @@ def process_pdf_pages(uploaded_file, first_file=False):
             generated_system_prompt = generate_system_prompt(first_200_words)
 
         # Batch size of 10 pages
-        batch_size = 10
+        batch_size = 5
         page_batches = [range(i, min(i + batch_size, total_pages)) for i in range(0, total_pages, batch_size)]
         
         # Use ThreadPoolExecutor to process batches concurrently
