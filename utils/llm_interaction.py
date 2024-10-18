@@ -12,9 +12,9 @@ from nltk.corpus import stopwords
 import tiktoken  # Ensure you have this library imported for token counting
 
 # Token counting function
-def count_tokens(text, model="gpt-4o"):
+def count_tokens(text, models="gpt-4o"):
     """Count the tokens in a given text."""
-    encoding = tiktoken.encoding_for_model(model)
+    encoding = tiktoken.encoding_for_model(models)
     tokens = encoding.encode(text)
     return len(tokens)
 # Set up logging
