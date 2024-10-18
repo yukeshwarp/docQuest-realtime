@@ -9,14 +9,14 @@ import random
 import re
 import nltk
 from nltk.corpus import stopwords
-import tiktoken  # Ensure you have this library imported for token counting
+#import tiktoken  # Ensure you have this library imported for token counting
 
 # Token counting function
-def count_tokens(text, models="gpt-4o"):
-    """Count the tokens in a given text."""
-    encoding = tiktoken.encoding_for_model(models)
-    tokens = encoding.encode(text)
-    return len(tokens)
+#def count_tokens(text, models="gpt-4o"):
+#    """Count the tokens in a given text."""
+#    encoding = tiktoken.encoding_for_model(models)
+#    tokens = encoding.encode(text)
+#    return len(tokens)
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -78,7 +78,7 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
     }
 
     # Count input tokens
-    input_tokens_count = count_tokens(data["messages"][1]["content"][0]["text"]) + count_tokens(data["messages"][1]["content"][1]["image_url"]["url"])
+    #input_tokens_count = count_tokens(data["messages"][1]["content"][0]["text"]) + count_tokens(data["messages"][1]["content"][1]["image_url"]["url"])
     
     url = f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}"
 
@@ -89,11 +89,11 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
             response.raise_for_status()  # Raise HTTPError for bad responses
             
             # Extract and count output tokens
-            output_text = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
-            output_tokens_count = count_tokens(output_text)
+            #output_text = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
+            #output_tokens_count = count_tokens(output_text)
 
             # Log token usage
-            logging.info(f"Get image explanation: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
+            #logging.info(f"Get image explanation: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
 
             return output_text
         
@@ -164,7 +164,7 @@ def generate_system_prompt(document_content):
     Generate a response filling the template with appropriate details based on the content of the document and return the filled in template as response."""
 
     # Count input tokens
-    input_tokens_count = count_tokens(user_message, model)
+    #input_tokens_count = count_tokens(user_message, model)
 
     data = {
         "model": model,
@@ -186,10 +186,10 @@ def generate_system_prompt(document_content):
         prompt_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "").strip()
 
         # Count output tokens
-        output_tokens_count = count_tokens(prompt_response, model)
+        #output_tokens_count = count_tokens(prompt_response, model)
 
         # Log token usage
-        logging.info(f"Generate system prompt: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
+        #logging.info(f"Generate system prompt: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
 
         return prompt_response
 
@@ -219,7 +219,7 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
     )
 
     # Count input tokens
-    input_tokens_count = count_tokens(prompt_message, model)
+    #input_tokens_count = count_tokens(prompt_message, model)
 
     data = {
         "model": model,
@@ -243,10 +243,10 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
             summary = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No summary provided.").strip()
 
             # Count output tokens
-            output_tokens_count = count_tokens(summary, model)
+            #output_tokens_count = count_tokens(summary, model)
 
             # Log token usage
-            logging.info(f"Summarize page {page_number}: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
+            #logging.info(f"Summarize page {page_number}: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
 
             return summary
         
@@ -318,7 +318,7 @@ def ask_question(documents, question, chat_history):
     )
 
     # Count input tokens
-    input_tokens_count = count_tokens(prompt_message, model)
+    #input_tokens_count = count_tokens(prompt_message, model)
 
     headers = get_headers()
 
@@ -342,10 +342,10 @@ def ask_question(documents, question, chat_history):
         output_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No answer provided.").strip()
 
         # Count output tokens
-        output_tokens_count = count_tokens(output_response, model)
+        #output_tokens_count = count_tokens(output_response, model)
 
         # Log token usage
-        logging.info(f"Ask question: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
+        #logging.info(f"Ask question: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
 
         return output_response
 
