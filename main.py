@@ -30,7 +30,8 @@ def handle_question(prompt):
             input_tokens = count_tokens(prompt)
             document_tokens = count_tokens(json.dumps(st.session_state.documents))
             total_input_tokens = input_tokens + document_tokens
-
+            st.sidebar.write(f"Total cur Input Tokens: {total_input_tokens}")
+            
             with st.spinner('Thinking...'):
                 answer = ask_question(
                     st.session_state.documents, prompt, st.session_state.chat_history
