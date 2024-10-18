@@ -9,6 +9,14 @@ import random
 import re
 import nltk
 from nltk.corpus import stopwords
+import tiktoken  # Ensure you have this library imported for token counting
+
+# Token counting function
+def count_tokens(text, model="gpt-4o"):
+    """Count the tokens in a given text."""
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(text)
+    return len(tokens)
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -44,14 +52,7 @@ def get_headers():
 
 
 
-import tiktoken  # Ensure you have this library imported for token counting
 
-# Token counting function
-def count_tokens(text, model="gpt-4o"):
-    """Count the tokens in a given text."""
-    encoding = tiktoken.encoding_for_model(model)
-    tokens = encoding.encode(text)
-    return len(tokens)
 
 def get_image_explanation(base64_image, retries=5, initial_delay=2):
     """Get image explanation from OpenAI API with exponential backoff."""
