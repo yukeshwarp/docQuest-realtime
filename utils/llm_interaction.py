@@ -89,7 +89,7 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
             response.raise_for_status()  # Raise HTTPError for bad responses
             
             # Extract and count output tokens
-            #output_text = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
+            output_text = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
             #output_tokens_count = count_tokens(output_text)
 
             # Log token usage
