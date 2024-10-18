@@ -5,14 +5,28 @@ from utils.llm_interaction import summarize_page, get_image_explanation, generat
 import io
 import base64
 import logging
+import string
+import nltk
+from nltk.corpus import stopwords
+
+# Download stopwords once
+nltk.download('stopwords', quiet=True)
+stop_words = set(stopwords.words('english'))
 
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
 generated_system_prompt = None
 
 def remove_stopwords_and_blanks(text):
-    """Clean the text by removing extra spaces."""
-    return ' '.join(text.split())
+    """Preprocess text by removing stopwords, punctuation, and extra blank spaces."""
+    # Remove punctuation
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    
+    # Remove stopwords and extra spaces
+    filtered_text = ' '.join([word for word in text.split() if word.lower() not in stop_words])
+    
+    # Remove multiple spaces
+    return ' '.join(filtered_text.split())
 
 def detect_ocr_images_and_vector_graphics_in_pdf(page, ocr_text_threshold=0.4):
     """Detect OCR images or vector graphics on a given PDF page."""
@@ -49,7 +63,8 @@ def process_page_batch(pdf_document, batch, system_prompt, ocr_text_threshold=0.
             page = pdf_document.load_page(page_number)
             text = page.get_text("text").strip()
             summary = ""
-            # Summarize the page
+            
+            # Summarize the page after preprocessing
             if text != "":
                 preprocessed_text = remove_stopwords_and_blanks(text)
                 summary = summarize_page(preprocessed_text, previous_summary, page_number + 1, system_prompt)
@@ -111,7 +126,7 @@ def process_pdf_pages(uploaded_file, first_file=False):
             first_200_words = ' '.join(full_text.split()[:200])
             generated_system_prompt = generate_system_prompt(first_200_words)
 
-        # Batch size of 5 pages
+        # Batch size of 10 pages
         batch_size = 10
         page_batches = [range(i, min(i + batch_size, total_pages)) for i in range(0, total_pages, batch_size)]
         
