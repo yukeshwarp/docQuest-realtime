@@ -9,14 +9,6 @@ import random
 import re
 import nltk
 from nltk.corpus import stopwords
-#import tiktoken  # Ensure you have this library imported for token counting
-
-# Token counting function
-#def count_tokens(text, models="gpt-4o"):
-#    """Count the tokens in a given text."""
-#    encoding = tiktoken.encoding_for_model(models)
-#    tokens = encoding.encode(text)
-#    return len(tokens)
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -52,34 +44,27 @@ def get_headers():
 
 
 
-
-
 def get_image_explanation(base64_image, retries=5, initial_delay=2):
     """Get image explanation from OpenAI API with exponential backoff."""
     headers = get_headers()
-    prompt_message = [
-        {
-            "type": "text",
-            "text": "Explain the contents and figures or tables if present of this image of a document page. The explanation should be concise and semantically meaningful. Do not make assumptions about the specification and be accurate in your explanation."
-        },
-        {
-            "type": "image_url",
-            "image_url": {"url": f"data:image/png;base64,{base64_image}"}
-        }
-    ]
-
     data = {
         "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant that responds in Markdown."},
-            {"role": "user", "content": prompt_message}
+            {"role": "user", "content": [
+                {
+                    "type": "text",
+                    "text": "Explain the contents and figures or tables if present of this image of a document page. The explanation should be concise and semantically meaningful. Do not make assumptions about the specification and be accurate in your explanation."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                }
+            ]}
         ],
         "temperature": 0.0
     }
 
-    # Count input tokens
-    #input_tokens_count = count_tokens(data["messages"][1]["content"][0]["text"]) + count_tokens(data["messages"][1]["content"][1]["image_url"]["url"])
-    
     url = f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}"
 
     # Exponential backoff retry mechanism
@@ -87,15 +72,7 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
         try:
             response = requests.post(url, headers=headers, json=data, timeout=30)  # Adjusted timeout
             response.raise_for_status()  # Raise HTTPError for bad responses
-            
-            # Extract and count output tokens
-            output_text = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
-            #output_tokens_count = count_tokens(output_text)
-
-            # Log token usage
-            #logging.info(f"Get image explanation: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
-
-            return output_text
+            return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No explanation provided.")
         
         except requests.exceptions.Timeout as e:
             if attempt < retries - 1:
@@ -120,57 +97,51 @@ def generate_system_prompt(document_content):
     """
     headers = get_headers()
     preprocessed_content = preprocess_text(document_content)
-
-    # Prepare the user message
-    user_message = f"""You are provided with a document. Based on its content, extract and identify the following details:
-    Document_content: {preprocessed_content}
-
-    1. **Domain**: Identify the specific domain or field of expertise the document is focused on. Examples include technology, finance, healthcare, law, etc.
-    2. **Subject Matter**: Determine the main topic or focus of the document. This could be a detailed concept, theory, or subject within the domain.
-    3. **Experience**: Based on the content, infer the level of experience required to understand or analyze the document (e.g., novice, intermediate, expert).
-    4. **Expertise**: Identify any specialized knowledge, skills, or proficiency in a particular area that is necessary to evaluate the content.
-    5. **Educational Qualifications**: Infer the level of education or qualifications expected of someone who would need to review or write the document (e.g., PhD, Master's, Bachelor's, or certification in a field).
-    6. **Style**: Describe the writing style of the document. Is it formal, technical, conversational, academic, or instructional?
-    7. **Tone**: Identify the tone used in the document. For example, is it neutral, authoritative, persuasive, or informative?
-    8. **Voice**: Analyze whether the voice is active, passive, first-person, third-person, or impersonal, and whether it's personal or objective.
-
-    After extracting this information, use it to fill in the following template:
-    
-    ---
-
-    You are now assuming a persona based on the content of the provided document. Your persona should reflect the <domain> and <subject matter> of the content, with the requisite <experience>, <expertise>, and <educational qualifications> to analyze the document effectively. Additionally, you should adopt the <style>, <tone> and <voice> present in the document. Your expertise includes:
-    
-    <Domain>-Specific Expertise:
-    - In-depth knowledge and experience relevant to the <subject matter> of the document.
-    - Familiarity with the key concepts, terminology, and practices within the <domain>.
-    
-    Analytical Proficiency:
-    - Skilled in interpreting and evaluating the content, structure, and purpose of the document.
-    - Ability to assess the accuracy, clarity, and completeness of the information presented.
-    
-    Style, Tone, and Voice Adaptation:
-    - Adopt the writing <style>, <tone>, and <voice> used in the document to ensure consistency and coherence.
-    - Maintain the level of formality, technicality, or informality as appropriate to the document’s context.
-    
-    Your analysis should include:
-    - A thorough evaluation of the content, ensuring it aligns with <domain>-specific standards and practices.
-    - An assessment of the clarity and precision of the information and any accompanying diagrams or illustrations.
-    - Feedback on the strengths and potential areas for improvement in the document.
-    - A determination of whether the document meets its intended purpose and audience requirements.
-    - Proposals for any necessary amendments or enhancements to improve the document’s effectiveness and accuracy.
-    
-    ---
-
-    Generate a response filling the template with appropriate details based on the content of the document and return the filled in template as response."""
-
-    # Count input tokens
-    #input_tokens_count = count_tokens(user_message, model)
-
     data = {
         "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant that serves the task given."},
-            {"role": "user", "content": user_message}
+            {"role": "user", "content":
+             f"""You are provided with a document. Based on its content, extract and identify the following details:
+            Document_content: {preprocessed_content}
+
+            1. **Domain**: Identify the specific domain or field of expertise the document is focused on. Examples include technology, finance, healthcare, law, etc.
+            2. **Subject Matter**: Determine the main topic or focus of the document. This could be a detailed concept, theory, or subject within the domain.
+            3. **Experience**: Based on the content, infer the level of experience required to understand or analyze the document (e.g., novice, intermediate, expert).
+            4. **Expertise**: Identify any specialized knowledge, skills, or proficiency in a particular area that is necessary to evaluate the content.
+            5. **Educational Qualifications**: Infer the level of education or qualifications expected of someone who would need to review or write the document (e.g., PhD, Master's, Bachelor's, or certification in a field).
+            6. **Style**: Describe the writing style of the document. Is it formal, technical, conversational, academic, or instructional?
+            7. **Tone**: Identify the tone used in the document. For example, is it neutral, authoritative, persuasive, or informative?
+            8. **Voice**: Analyze whether the voice is active, passive, first-person, third-person, or impersonal, and whether it's personal or objective.
+
+            After extracting this information, use it to fill in the following template:
+    
+            ---
+
+            You are now assuming a persona based on the content of the provided document. Your persona should reflect the <domain> and <subject matter> of the content, with the requisite <experience>, <expertise>, and <educational qualifications> to analyze the document effectively. Additionally, you should adopt the <style>, <tone> and <voice> present in the document. Your expertise includes:
+    
+            <Domain>-Specific Expertise:
+            - In-depth knowledge and experience relevant to the <subject matter> of the document.
+            - Familiarity with the key concepts, terminology, and practices within the <domain>.
+            
+            Analytical Proficiency:
+            - Skilled in interpreting and evaluating the content, structure, and purpose of the document.
+            - Ability to assess the accuracy, clarity, and completeness of the information presented.
+    
+            Style, Tone, and Voice Adaptation:
+            - Adopt the writing <style>, <tone>, and <voice> used in the document to ensure consistency and coherence.
+            - Maintain the level of formality, technicality, or informality as appropriate to the document’s context.
+            
+            Your analysis should include:
+            - A thorough evaluation of the content, ensuring it aligns with <domain>-specific standards and practices.
+            - An assessment of the clarity and precision of the information and any accompanying diagrams or illustrations.
+            - Feedback on the strengths and potential areas for improvement in the document.
+            - A determination of whether the document meets its intended purpose and audience requirements.
+            - Proposals for any necessary amendments or enhancements to improve the document’s effectiveness and accuracy.
+        
+            ---
+
+            Generate a response filling the template with appropriate details based on the content of the document and return the filled in template as response."""}
         ],
         "temperature": 0.5  # Adjust as needed to generate creative but relevant system prompts
     }
@@ -183,15 +154,8 @@ def generate_system_prompt(document_content):
             timeout=20
         )
         response.raise_for_status()
-        prompt_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "").strip()
-
-        # Count output tokens
-        #output_tokens_count = count_tokens(prompt_response, model)
-
-        # Log token usage
-        #logging.info(f"Generate system prompt: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
-
-        return prompt_response
+        prompt_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "")
+        return prompt_response.strip()
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Error generating system prompt: {e}")
@@ -206,7 +170,6 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
     headers = get_headers()
     preprocessed_page_text = preprocess_text(page_text)
     preprocessed_previous_summary = preprocess_text(previous_summary)
-    
     # Generate the system prompt based on the document content
     system_prompt = system_prompt
     
@@ -217,9 +180,6 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
         f"Previous page summary: {preprocessed_previous_summary}\n\n"
         f"Current page content:\n{preprocessed_page_text}\n"
     )
-
-    # Count input tokens
-    #input_tokens_count = count_tokens(prompt_message, model)
 
     data = {
         "model": model,
@@ -240,15 +200,7 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
                 timeout=50
             )
             response.raise_for_status()
-            summary = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No summary provided.").strip()
-
-            # Count output tokens
-            #output_tokens_count = count_tokens(summary, model)
-
-            # Log token usage
-            #logging.info(f"Summarize page {page_number}: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
-
-            return summary
+            return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No summary provided.").strip()
         
         except requests.exceptions.RequestException as e:
             attempt += 1
@@ -261,8 +213,6 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
             jitter = random.uniform(0, delay)  # Add jitter for randomness
             logging.warning(f"Retrying in {jitter:.2f} seconds (attempt {attempt}) due to error: {e}")
             time.sleep(jitter)
-    
-    return "Error: Max retries reached without success."
 
 
 def ask_question(documents, question, chat_history):
@@ -317,15 +267,12 @@ def ask_question(documents, question, chat_history):
     """
     )
 
-    # Count input tokens
-    #input_tokens_count = count_tokens(prompt_message, model)
-
     headers = get_headers()
 
     data = {
         "model": model,
         "messages": [
-            {"role": "system", content: "You are an assistant that answers questions based only on provided knowledge base."},
+            {"role": "system", "content": "You are an assistant that answers questions based only on provided knowledge base."},
             {"role": "user", "content": prompt_message}
         ],
         "temperature": 0.0
@@ -339,15 +286,7 @@ def ask_question(documents, question, chat_history):
             timeout=60  # Add timeout for API request
         )
         response.raise_for_status()  # Raise HTTPError for bad responses
-        output_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "No answer provided.").strip()
-
-        # Count output tokens
-        #output_tokens_count = count_tokens(output_response, model)
-
-        # Log token usage
-        #logging.info(f"Ask question: Input tokens = {input_tokens_count}, Output tokens = {output_tokens_count}")
-
-        return output_response
+        return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No answer provided.").strip()
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Error answering question '{question}': {e}")
