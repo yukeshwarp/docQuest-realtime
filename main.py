@@ -16,7 +16,7 @@ if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = []
 
 # Token counting function
-def count_tokens(text, model="gpt-3.5-turbo"):
+def count_tokens(text, model="GPT4Omni"):
     """Count the tokens in a given text."""
     encoding = tiktoken.encoding_for_model(model)
     tokens = encoding.encode(text)
