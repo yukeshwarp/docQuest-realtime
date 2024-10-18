@@ -205,7 +205,6 @@ def ask_question(documents, question, chat_history):
 
             combined_content += (
                 f"Page {page['page_number']}\n"
-                f"Full Text: {page_full_text}\n"
                 f"Summary: {page_summary}\n"
                 f"Image Analysis: {image_explanation}\n\n"
             )
