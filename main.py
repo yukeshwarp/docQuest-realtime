@@ -5,6 +5,7 @@ from utils.llm_interaction import ask_question
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import io
+import tiktoken  # For token counting
 
 # Initialize session state variables
 if 'documents' not in st.session_state:
@@ -14,16 +15,39 @@ if 'chat_history' not in st.session_state:
 if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = []
 
-# Function to handle user question
+# Token counting function
+def count_tokens(text, model="gpt-3.5-turbo"):
+    """Count the tokens in a given text."""
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(text)
+    return len(tokens)
+
+# Function to handle user question and count tokens
 def handle_question(prompt):
     if prompt:
         try:
+            # Count tokens for the user prompt and documents (input)
+            input_tokens = count_tokens(prompt)
+            document_tokens = count_tokens(json.dumps(st.session_state.documents))
+            total_input_tokens = input_tokens + document_tokens
+
             with st.spinner('Thinking...'):
                 answer = ask_question(
                     st.session_state.documents, prompt, st.session_state.chat_history
                 )
-            st.session_state.chat_history.append({"question": prompt, "answer": answer})
-            # Display the updated chat history
+            
+            # Count tokens for the response (output)
+            output_tokens = count_tokens(answer)
+
+            # Store the question, answer, and token counts
+            st.session_state.chat_history.append({
+                "question": prompt,
+                "answer": answer,
+                "input_tokens": total_input_tokens,
+                "output_tokens": output_tokens
+            })
+
+            # Display the updated chat history with token counts
             display_chat()
         except Exception as e:
             st.error(f"Error processing question: {e}")
@@ -33,6 +57,23 @@ def reset_session():
     st.session_state.documents = {}
     st.session_state.chat_history = []
     st.session_state.uploaded_files = []
+
+# Function to display chat history with token counts
+def display_chat():
+    if st.session_state.chat_history:
+        for chat in st.session_state.chat_history:
+            user_message = f"""
+            <div style='padding:10px; border-radius:10px; margin:5px 0; text-align:right;'> 
+            {chat['question']}
+            <small style='color:grey;'>Tokens: {chat['input_tokens']}</small></div>
+            """
+            assistant_message = f"""
+            <div style='padding:10px; border-radius:10px; margin:5px 0; text-align:left;'> 
+            {chat['answer']}
+            <small style='color:grey;'>Tokens: {chat['output_tokens']}</small></div>
+            """
+            st.markdown(user_message, unsafe_allow_html=True)
+            st.markdown(assistant_message, unsafe_allow_html=True)
 
 # Sidebar for file upload and document information
 with st.sidebar:
@@ -93,23 +134,11 @@ with st.sidebar:
         )
 
 # Main Page - Chat Interface
-st.image("logoD.png", width = 200)
+st.image("logoD.png", width=200)
 st.title("docQuest")
 st.subheader("Unveil the Essence, Compare Easily, Analyze Smartly", divider="orange")
-if st.session_state.documents:
 
-    # Function to display chat history
-    def display_chat():
-        if st.session_state.chat_history:
-            for chat in st.session_state.chat_history:
-                user_message = f"""
-                <div style='padding:10px; border-radius:10px; margin:5px 0; text-align:right;'> {chat['question']}</div>
-                """
-                assistant_message = f"""
-                <div style='padding:10px; border-radius:10px; margin:5px 0; text-align:left;'> {chat['answer']}</div>
-                """
-                st.markdown(user_message, unsafe_allow_html=True)
-                st.markdown(assistant_message, unsafe_allow_html=True)
+if st.session_state.documents:
 
     # Chat input field using st.chat_input
     prompt = st.chat_input("Ask me anything about your documents", key="chat_input")
@@ -117,3 +146,9 @@ if st.session_state.documents:
     # Check if the prompt has been updated
     if prompt:
         handle_question(prompt)  # Call the function to handle the question
+
+# Sidebar to display total tokens used
+total_input_tokens = sum(chat["input_tokens"] for chat in st.session_state.chat_history)
+total_output_tokens = sum(chat["output_tokens"] for chat in st.session_state.chat_history)
+st.sidebar.write(f"Total Input Tokens: {total_input_tokens}")
+st.sidebar.write(f"Total Output Tokens: {total_output_tokens}")
