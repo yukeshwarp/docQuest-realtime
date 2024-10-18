@@ -51,12 +51,16 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
         "model": model,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant that responds in Markdown."},
-            {"role": "user", "content": (
-                "Explain the contents and figures or tables if present of this image of a document page. "
-                "The explanation should be concise and semantically meaningful. Do not make assumptions about the specification "
-                "and be accurate in your explanation. Here is the image in base64 format: "
-                f"data:image/png;base64,{base64_image}"
-            )}
+            {"role": "user", "content": [
+                {
+                    "type": "text",
+                    "text": "Explain the contents and figures or tables if present of this image of a document page. The explanation should be concise and semantically meaningful. Do not make assumptions about the specification and be accurate in your explanation."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                }
+            ]}
         ],
         "temperature": 0.0
     }
@@ -228,7 +232,6 @@ def ask_question(documents, question, chat_history):
 
             combined_content += (
                 f"Page {page['page_number']}\n"
-                f"Full Text: {page_full_text}\n"
                 f"Summary: {page_summary}\n"
                 f"Image Analysis: {image_explanation}\n\n"
             )
