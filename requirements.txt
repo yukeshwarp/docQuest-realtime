@@ -3,3 +3,4 @@ PyMuPDF
 requests
 Pillow
 python-dotenv
+tiktoken
