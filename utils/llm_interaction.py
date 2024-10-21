@@ -240,7 +240,7 @@ def ask_question(documents, question, chat_history):
             total_tokens += calculate_token_count(page.get('full_text', 'No full text available'))
 
     # If total tokens exceed 100k, perform relevance check
-    if total_tokens > 65000:
+    if total_tokens > 120000:
         # Function to check page relevance using the summary
         def check_page_relevance(doc_name, page):
             page_summary = preprocess_text(page.get('text_summary', 'No summary available'))  # Preprocess summary
