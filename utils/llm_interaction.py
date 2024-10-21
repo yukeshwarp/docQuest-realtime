@@ -244,7 +244,7 @@ def ask_question(documents, question, chat_history):
         # Function to check page relevance using the summary
         def check_page_relevance(doc_name, page):
             page_summary = preprocess_text(page.get('text_summary', 'No summary available'))  # Preprocess summary
-            page_full_text = preprocess_text(page.get('full_text', 'No full text available'))  # Preprocess full text
+            #page_full_text = preprocess_text(page.get('full_text', 'No full text available'))  # Preprocess full text
             image_explanation = "\n".join(
                 f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
             ) if page["image_analysis"] else "No image analysis."
@@ -256,7 +256,6 @@ def ask_question(documents, question, chat_history):
 
             Document: {doc_name}, Page {page['page_number']}
             Summary: {page_summary}
-            Full Text: {page_full_text}
             Image Analysis: {image_explanation}
 
             Based on the content above, answer this question: {preprocessed_question}
