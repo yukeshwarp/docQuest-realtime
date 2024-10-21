@@ -215,61 +215,126 @@ def summarize_page(page_text, previous_summary, page_number, system_prompt, max_
             time.sleep(jitter)
 
 
+import concurrent.futures
+import requests
+import logging
+
 def ask_question(documents, question, chat_history):
-    """Answer a question based on the full text, summarized content of multiple PDFs, and chat history."""
-    combined_content = ""
+    """Answer a question by first checking page relevance with multithreading, then using only relevant pages for the final answer."""
 
-    # Combine document full texts, summaries, and image analyses with document names
-    for doc_name, doc_data in documents.items():
-        combined_content += f"\nDocument: {doc_name}\n"  # Add document name for clarity
-        for page in doc_data["pages"]:
-            page_summary = preprocess_text(page['text_summary'])  # Preprocess summary
-            page_full_text = preprocess_text(page.get('full_text', 'No text available'))  # Preprocess full text
+    headers = get_headers()
 
-            image_explanation = "\n".join(
-                f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
-            ) if page["image_analysis"] else "No image analysis."
+    # Preprocess the question
+    preprocessed_question = preprocess_text(question)
 
-            combined_content += (
-                f"Page {page['page_number']}\n"
-                f"Full Text: {page_full_text}\n"
-                f"Summary: {page_summary}\n"
-                f"Image Analysis: {image_explanation}\n\n"
+    # Function to check page relevance
+    def check_page_relevance(doc_name, page):
+        page_full_text = preprocess_text(page.get('full_text', 'No text available'))  # Preprocess full text
+        image_explanation = "\n".join(
+            f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
+        ) if page["image_analysis"] else "No image analysis."
+
+        # Create a page-specific prompt to check relevance
+        relevance_check_prompt = f"""
+        You are an assistant that checks if a specific document page contains an answer to the user's question.
+        Here's the full text and image analysis of a page:
+
+        Document: {doc_name}, Page {page['page_number']}
+        Full Text: {page_full_text}
+        Image Analysis: {image_explanation}
+
+        Based on the content above, answer this question: {preprocessed_question}
+
+        Respond with "yes" if this page contains relevant information, otherwise respond with "no".
+        """
+
+        relevance_data = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are an assistant that determines if a page is relevant to a question."},
+                {"role": "user", "content": relevance_check_prompt}
+            ],
+            "temperature": 0.0
+        }
+
+        try:
+            response = requests.post(
+                f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
+                headers=headers,
+                json=relevance_data,
+                timeout=60  # Add timeout for API request
             )
+            response.raise_for_status()
+            relevance_answer = response.json().get('choices', [{}])[0].get('message', {}).get('content', "no").strip().lower()
 
-    # Preprocess the chat history as well
+            if relevance_answer == "yes":
+                return {
+                    "doc_name": doc_name,
+                    "page_number": page["page_number"],
+                    "full_text": page_full_text,
+                    "image_explanation": image_explanation
+                }
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error checking relevance of page {page['page_number']} in '{doc_name}': {e}")
+            return None
+
+    # Step 1: Use multithreading to check the relevance of each page
+    relevant_pages = []
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_page = {
+            executor.submit(check_page_relevance, doc_name, page): (doc_name, page)
+            for doc_name, doc_data in documents.items()
+            for page in doc_data["pages"]
+        }
+
+        for future in concurrent.futures.as_completed(future_to_page):
+            result = future.result()
+            if result:
+                relevant_pages.append(result)
+
+    # Step 2: Combine only relevant pages for the final question-answering prompt
+    if not relevant_pages:
+        return "The content of the provided documents does not contain an answer to your question."
+
+    combined_relevant_content = ""
+    for page in relevant_pages:
+        combined_relevant_content += (
+            f"\nDocument: {page['doc_name']}, Page {page['page_number']}\n"
+            f"Full Text: {page['full_text']}\n"
+            f"Image Analysis: {page['image_explanation']}\n"
+        )
+
+    # Preprocess the chat history
     conversation_history = "".join(
         f"User: {preprocess_text(chat['question'])}\nAssistant: {preprocess_text(chat['answer'])}\n"
         for chat in chat_history
     )
 
-    # Preprocess the question
-    preprocessed_question = preprocess_text(question)
-
-    # Prepare the prompt message with preprocessed content
+    # Prepare the final prompt message with relevant pages
     prompt_message = (
         f"""
-    You are given the following content from multiple documents:
+        You are given the following relevant content from multiple documents:
 
-    ---
-    {combined_content}
-    ---
-    Previous responses over the current chat session: {conversation_history}
+        ---
+        {combined_relevant_content}
+        ---
 
-    Answer the following question based **strictly and only** on the factual information provided in the content above. 
-    Carefully verify all details from the content and do not generate any information that is not explicitly mentioned in it.
-    If the answer cannot be determined from the content, explicitly state that the information is not available.
-    Ensure the response is clearly formatted for readability.
+        Previous responses over the current chat session: {conversation_history}
 
-    Include references to the document name and page number(s) where the information was found.
+        Answer the following question based **strictly and only** on the factual information provided in the content above. 
+        Carefully verify all details from the content and do not generate any information that is not explicitly mentioned in it.
+        If the answer cannot be determined from the content, explicitly state that the information is not available.
+        Ensure the response is clearly formatted for readability.
 
-    Question: {preprocessed_question}
-    """
+        Include references to the document name and page number(s) where the information was found.
+
+        Question: {preprocessed_question}
+        """
     )
 
-    headers = get_headers()
-
-    data = {
+    # Step 3: Send the final question-answering prompt
+    final_data = {
         "model": model,
         "messages": [
             {"role": "system", "content": "You are an assistant that answers questions based only on provided knowledge base."},
@@ -282,13 +347,12 @@ def ask_question(documents, question, chat_history):
         response = requests.post(
             f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
             headers=headers,
-            json=data,
+            json=final_data,
             timeout=60  # Add timeout for API request
         )
-        response.raise_for_status()  # Raise HTTPError for bad responses
+        response.raise_for_status()
         return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No answer provided.").strip()
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Error answering question '{question}': {e}")
         raise Exception(f"Unable to answer the question due to network issues or API error.")
-
