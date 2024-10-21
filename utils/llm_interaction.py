@@ -236,23 +236,26 @@ def ask_question(documents, question, chat_history):
 
     for doc_name, doc_data in documents.items():
         for page in doc_data["pages"]:
-            total_tokens += calculate_token_count(page.get('full_text', 'No text available'))
+            total_tokens += calculate_token_count(page.get('text_summary', 'No summary available'))
+            total_tokens += calculate_token_count(page.get('full_text', 'No full text available'))
 
     # If total tokens exceed 100k, perform relevance check
     if total_tokens > 65000:
-        # Function to check page relevance
+        # Function to check page relevance using the summary
         def check_page_relevance(doc_name, page):
-            page_full_text = preprocess_text(page.get('full_text', 'No text available'))  # Preprocess full text
+            page_summary = preprocess_text(page.get('text_summary', 'No summary available'))  # Preprocess summary
+            page_full_text = preprocess_text(page.get('full_text', 'No full text available'))  # Preprocess full text
             image_explanation = "\n".join(
                 f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
             ) if page["image_analysis"] else "No image analysis."
 
-            # Create a page-specific prompt to check relevance
+            # Create a page-specific prompt to check relevance using the summary
             relevance_check_prompt = f"""
             You are an assistant that checks if a specific document page contains an answer to the user's question.
-            Here's the full text and image analysis of a page:
+            Here's the summary, full text, and image analysis of a page:
 
             Document: {doc_name}, Page {page['page_number']}
+            Summary: {page_summary}
             Full Text: {page_full_text}
             Image Analysis: {image_explanation}
 
@@ -284,6 +287,7 @@ def ask_question(documents, question, chat_history):
                     return {
                         "doc_name": doc_name,
                         "page_number": page["page_number"],
+                        "text_summary": page_summary,
                         "full_text": page_full_text,
                         "image_explanation": image_explanation
                     }
@@ -314,6 +318,7 @@ def ask_question(documents, question, chat_history):
         for page in relevant_pages:
             combined_relevant_content += (
                 f"\nDocument: {page['doc_name']}, Page {page['page_number']}\n"
+                f"Summary: {page['text_summary']}\n"
                 f"Full Text: {page['full_text']}\n"
                 f"Image Analysis: {page['image_explanation']}\n"
             )
@@ -322,12 +327,14 @@ def ask_question(documents, question, chat_history):
         combined_relevant_content = ""
         for doc_name, doc_data in documents.items():
             for page in doc_data["pages"]:
-                page_full_text = preprocess_text(page.get('full_text', 'No text available'))
+                page_summary = preprocess_text(page.get('text_summary', 'No summary available'))
+                page_full_text = preprocess_text(page.get('full_text', 'No full text available'))
                 image_explanation = "\n".join(
                     f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
                 ) if page["image_analysis"] else "No image analysis."
                 combined_relevant_content += (
                     f"\nDocument: {doc_name}, Page {page['page_number']}\n"
+                    f"Summary: {page_summary}\n"
                     f"Full Text: {page_full_text}\n"
                     f"Image Analysis: {image_explanation}\n"
                 )
@@ -338,7 +345,7 @@ def ask_question(documents, question, chat_history):
         for chat in chat_history
     )
 
-    # Prepare the final prompt message with relevant pages
+    # Prepare the final prompt message with relevant pages, summaries, and full text
     prompt_message = (
         f"""
         You are given the following relevant content from multiple documents:
