@@ -320,10 +320,10 @@ def fetch_page(doc_data, question):
 
     for page in doc_data["pages"]:
         page_number = page["page_number"]
-        structured_data = page["structured_data"][0]
+        structured_data = page["structured_data"]
 
-        for section in structured_data["heading"]:
-            heading = section
+        for section in structured_data["sections"]:
+            heading = section['heading']
             for paragraph in section["paragraphs"]:
                 # Construct prompt for LLM to check relevance
                 relevance_prompt = f"Is the following paragraph relevant to the question: '{question}'? Paragraph: '{paragraph}'"
