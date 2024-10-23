@@ -25,33 +25,33 @@ def count_tokens(text, model="gpt-4o"):
 # Function to handle user question and count tokens
 def handle_question(prompt):
     if prompt:
-        try:
+        #try:
             # Count tokens for the user prompt and documents (input)
-            input_tokens = count_tokens(prompt)
-            document_tokens = count_tokens(json.dumps(st.session_state.documents))
-            total_input_tokens = input_tokens + document_tokens
-            st.sidebar.write(f"Total cur Input Tokens: {total_input_tokens}")
-            
-            with st.spinner('Thinking...'):
-                answer = ask_question(
-                    st.session_state.documents, prompt, st.session_state.chat_history
-                )
-            
-            # Count tokens for the response (output)
-            output_tokens = count_tokens(answer)
+        input_tokens = count_tokens(prompt)
+        document_tokens = count_tokens(json.dumps(st.session_state.documents))
+        total_input_tokens = input_tokens + document_tokens
+        st.sidebar.write(f"Total cur Input Tokens: {total_input_tokens}")
+        
+        with st.spinner('Thinking...'):
+            answer = ask_question(
+                st.session_state.documents, prompt, st.session_state.chat_history
+            )
+        
+        # Count tokens for the response (output)
+        output_tokens = count_tokens(answer)
 
-            # Store the question, answer, and token counts
-            st.session_state.chat_history.append({
-                "question": prompt,
-                "answer": answer,
-                "input_tokens": total_input_tokens,
-                "output_tokens": output_tokens
-            })
+        # Store the question, answer, and token counts
+        st.session_state.chat_history.append({
+            "question": prompt,
+            "answer": answer,
+            "input_tokens": total_input_tokens,
+            "output_tokens": output_tokens
+        })
 
-            # Display the updated chat history with token counts
-            display_chat()
-        except Exception as e:
-            st.error(f"Error processing question: {e}")
+        # Display the updated chat history with token counts
+        display_chat()
+        #except Exception as e:
+         #   st.error(f"Error processing question: {e}")
 
 # Function to reset session data when files are changed
 def reset_session():
