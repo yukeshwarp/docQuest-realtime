@@ -79,7 +79,7 @@ def display_chat():
 # Sidebar for file upload and document information
 with st.sidebar:
     uploaded_files = st.file_uploader(
-        "",
+        " ",
         type=["pdf", "docx", "xlsx", "pptx"],
         accept_multiple_files=True,
         help="Supports PDF, DOCX, XLSX, and PPTX formats.",
