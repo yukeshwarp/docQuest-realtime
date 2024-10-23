@@ -89,6 +89,71 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
 
     return "Error: Max retries reached without success."
 
+import requests
+import logging
+
+def llm_extract_sections_paragraphs_tables(text):
+    """
+    Use Azure LLM to extract sections, headings, paragraphs, and tables from the given text.
+    
+    :param text: The full text content of a PDF page or a section of a document.
+    :return: A structured JSON object containing sections, headings, paragraphs, and tables.
+    """
+    headers = get_headers()  # This function should return the necessary headers for Azure API requests.
+    preprocessed_text = preprocess_text(text)  # Optional: preprocess text before sending to the model.
+    
+    data = {
+        "model": model,  # Use your Azure OpenAI model deployment ID.
+        "messages": [
+            {"role": "system", "content": "You are an expert in document structure analysis."},
+            {"role": "user", "content":
+             f"""
+             You are provided with the following document text. Based on its content, extract and identify the following details:
+             Text: {preprocessed_text}
+
+             1. Divide the text into sections.
+             2. Identify headings, paragraphs, and tables.
+             3. Return the output as a structured JSON format with sections, headings, paragraphs, and tables.
+
+             Example JSON structure:
+             {{
+                 "sections": [
+                     {{
+                         "heading": "Heading Title",
+                         "paragraphs": ["Paragraph 1 content", "Paragraph 2 content"],
+                         "tables": ["Table content as text"]
+                     }},
+                     ...
+                 ]
+             }}
+             """
+            }
+        ],
+        "temperature": 0.5  # Adjust as needed for creativity and structure.
+    }
+
+    try:
+        response = requests.post(
+            f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
+            headers=headers,
+            json=data,
+            timeout=20
+        )
+        response.raise_for_status()  # Check for HTTP errors.
+        prompt_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "")
+        
+        # Assuming the response is a JSON-like structure
+        structured_output = eval(prompt_response.strip())  # Safely convert the response into a Python dictionary.
+
+        return structured_output
+
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error during LLM extraction of sections and tables: {e}")
+        return {
+            "sections": [],
+            "tables": []
+        }
+
 
 def generate_system_prompt(document_content):
     """
@@ -219,158 +284,196 @@ import concurrent.futures
 import requests
 import logging
 
-def ask_question(documents, question, chat_history):
-    """Answer a question by first checking page relevance with multithreading, then using only relevant pages for the final answer."""
+import requests
+import logging
 
-    headers = get_headers()
-
-    # Preprocess the question
-    preprocessed_question = preprocess_text(question)
-
-    # Function to calculate the token count (approximation)
-    def calculate_token_count(text):
-        return len(text.split())  # This is a simple approximation
-
-    # Calculate total token count
-    total_tokens = calculate_token_count(preprocessed_question)
-
-    for doc_name, doc_data in documents.items():
-        for page in doc_data["pages"]:
-            total_tokens += calculate_token_count(page.get('text_summary', 'No summary available'))
-            total_tokens += calculate_token_count(page.get('full_text', 'No full text available'))
-
-    # If total tokens exceed 100k, perform relevance check
-    if total_tokens > 120000:
-        # Function to check page relevance using the summary
-        def check_page_relevance(doc_name, page):
-            page_summary = preprocess_text(page.get('text_summary', 'No summary available'))  # Preprocess summary
-            page_full_text = preprocess_text(page.get('full_text', 'No full text available'))  # Preprocess full text
-            image_explanation = "\n".join(
-                f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
-            ) if page["image_analysis"] else "No image analysis."
-
-            # Create a page-specific prompt to check relevance using the summary
-            relevance_check_prompt = f"""
-            You are an assistant that checks if a specific document page contains an answer to the user's question.
-            Here's the summary, full text, and image analysis of a page:
-
-            Document: {doc_name}, Page {page['page_number']}
-            Summary: {page_summary}
-            Image Analysis: {image_explanation}
-
-            Based on the content above, answer this question: {preprocessed_question}
-
-            Respond with "yes" if this page contains relevant information, otherwise respond with "no".
-            """
-
-            relevance_data = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": "You are an assistant that determines if a page is relevant to a question."},
-                    {"role": "user", "content": relevance_check_prompt}
-                ],
-                "temperature": 0.0
-            }
-
-            try:
-                response = requests.post(
-                    f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
-                    headers=headers,
-                    json=relevance_data,
-                    timeout=60  # Add timeout for API request
-                )
-                response.raise_for_status()
-                relevance_answer = response.json().get('choices', [{}])[0].get('message', {}).get('content', "no").strip().lower()
-
-                if relevance_answer == "yes":
-                    return {
-                        "doc_name": doc_name,
-                        "page_number": page["page_number"],
-                        "text_summary": page_summary,
-                        "full_text": page_full_text,
-                        "image_explanation": image_explanation
-                    }
-
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Error checking relevance of page {page['page_number']} in '{doc_name}': {e}")
-                return None
-
-        # Step 1: Use multithreading to check the relevance of each page
-        relevant_pages = []
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_page = {
-                executor.submit(check_page_relevance, doc_name, page): (doc_name, page)
-                for doc_name, doc_data in documents.items()
-                for page in doc_data["pages"]
-            }
-
-            for future in concurrent.futures.as_completed(future_to_page):
-                result = future.result()
-                if result:
-                    relevant_pages.append(result)
-
-        # Step 2: Combine only relevant pages for the final question-answering prompt
-        if not relevant_pages:
-            return "The content of the provided documents does not contain an answer to your question."
-
-        combined_relevant_content = ""
-        for page in relevant_pages:
-            combined_relevant_content += (
-                f"\nDocument: {page['doc_name']}, Page {page['page_number']}\n"
-                f"Summary: {page['text_summary']}\n"
-                f"Full Text: {page['full_text']}\n"
-                f"Image Analysis: {page['image_explanation']}\n"
-            )
-    else:
-        # If total tokens are less than or equal to 100k, assume all pages are relevant
-        combined_relevant_content = ""
-        for doc_name, doc_data in documents.items():
-            for page in doc_data["pages"]:
-                page_summary = preprocess_text(page.get('text_summary', 'No summary available'))
-                page_full_text = preprocess_text(page.get('full_text', 'No full text available'))
-                image_explanation = "\n".join(
-                    f"Page {img['page_number']}: {img['explanation']}" for img in page["image_analysis"]
-                ) if page["image_analysis"] else "No image analysis."
-                combined_relevant_content += (
-                    f"\nDocument: {doc_name}, Page {page['page_number']}\n"
-                    f"Summary: {page_summary}\n"
-                    f"Full Text: {page_full_text}\n"
-                    f"Image Analysis: {image_explanation}\n"
-                )
-
-    # Preprocess the chat history
-    conversation_history = "".join(
-        f"User: {preprocess_text(chat['question'])}\nAssistant: {preprocess_text(chat['answer'])}\n"
-        for chat in chat_history
-    )
-
-    # Prepare the final prompt message with relevant pages, summaries, and full text
-    prompt_message = (
-        f"""
-        You are given the following relevant content from multiple documents:
-
-        ---
-        {combined_relevant_content}
-        ---
-
-        Previous responses over the current chat session: {conversation_history}
-
-        Answer the following question based **strictly and only** on the factual information provided in the content above. 
-        Carefully verify all details from the content and do not generate any information that is not explicitly mentioned in it.
-        If the answer cannot be determined from the content, explicitly state that the information is not available.
-        Ensure the response is clearly formatted for readability.
-
-        Include references to the document name and page number(s) where the information was found.
-
-        Question: {preprocessed_question}
-        """
-    )
-
-    # Step 3: Send the final question-answering prompt
-    final_data = {
+def llm_check_relevance(prompt):
+    """Check the relevance of a given text content to a question using the LLM."""
+    headers = get_headers()  # Function to retrieve headers for the API request
+    data = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "You are an assistant that answers questions based only on provided knowledge base."},
+            {"role": "system", "content": "You are a relevance-checking assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.0
+    }
+
+    try:
+        response = requests.post(
+            f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
+            headers=headers,
+            json=data,
+            timeout=60  # Add timeout for API request
+        )
+        response.raise_for_status()  # Raise HTTPError for bad responses
+
+        # Extract the relevance determination from the response
+        relevance_result = response.json().get('choices', [{}])[0].get('message', {}).get('content', "").strip()
+
+        # Log the relevance check result
+        logging.info(f"Relevance check result: {relevance_result}")
+
+        # Determine if the content is relevant
+        return "yes" in relevance_result.lower()  # Return True if the response indicates relevance
+
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error checking relevance: {e}")
+        return False  # Return False in case of an error
+
+
+def fetch_page(doc_data, question):
+    """Check relevance of paragraphs in each page and retrieve relevant headings and paragraphs."""
+    relevant_content = []
+
+    for page in doc_data["pages"]:
+        page_number = page["page_number"]
+        structured_data = page["structured_data"]
+
+        for section in structured_data["sections"]:
+            heading = section["heading"]
+            for paragraph in section["paragraphs"]:
+                # Construct prompt for LLM to check relevance
+                relevance_prompt = f"Is the following paragraph relevant to the question: '{question}'? Paragraph: '{paragraph}'"
+
+                # Call LLM with relevance check
+                if llm_check_relevance(relevance_prompt):
+                    relevant_content.append({
+                        "page_number": page_number,
+                        "heading": heading,
+                        "paragraph": paragraph
+                    })
+
+    return relevant_content
+
+def fetch_sections(doc_data, question):
+    """Check relevance of page summaries and return full text if relevant."""
+    relevant_texts = []
+
+    for page in doc_data["pages"]:
+        page_number = page["page_number"]
+        page_summary = page["text_summary"]
+
+        # Construct prompt for LLM to check relevance
+        relevance_prompt = f"Is the following page summary relevant to the question: '{question}'? Summary: '{page_summary}'"
+
+        # Call LLM with relevance check
+        if llm_check_relevance(relevance_prompt):
+            relevant_texts.append({
+                "page_number": page_number,
+                "full_text": page["full_text"]  # Return the full text of the page
+            })
+
+    return relevant_texts
+
+def fetch_table(doc_data, question):
+    """Check relevance of tables and return page number and table content if relevant."""
+    relevant_tables = []
+
+    for page in doc_data["pages"]:
+        page_number = page["page_number"]
+        structured_data = page["structured_data"]
+
+        for table in structured_data["tables"]:
+            # Construct prompt for LLM to check relevance
+            relevance_prompt = f"Does this table contain relevant data for the question: '{question}'? Table: {table}"
+
+            # Call LLM with relevance check
+            if llm_check_relevance(relevance_prompt):
+                relevant_tables.append({
+                    "page_number": page_number,
+                    "table": table  # Return the table content
+                })
+
+    return relevant_tables
+
+def fetch_figures(doc_data, question):
+    """Check relevance of image explanations and return page number and image explanation if relevant."""
+    relevant_figures = []
+
+    for page in doc_data["pages"]:
+        page_number = page["page_number"]
+        image_analysis = page["image_analysis"]
+
+        for image in image_analysis:
+            # Construct prompt for LLM to check relevance
+            relevance_prompt = f"Is this image explanation relevant to the question: '{question}'? Explanation: '{image['explanation']}'"
+
+            # Call LLM with relevance check
+            if llm_check_relevance(relevance_prompt):
+                relevant_figures.append({
+                    "page_number": page_number,
+                    "explanation": image["explanation"]  # Return the image explanation
+                })
+
+    return relevant_figures
+
+def ask_question(documents, question, chat_history):
+    """Answer a question based on relevant content from multiple PDFs and chat history."""
+    combined_content = []
+    structured_relevant_content = {
+        "page_numbers": [],
+        "summaries": [],
+        "headings_and_paragraphs": [],
+        "tables": [],
+        "figures": []
+    }
+
+    # Combine relevant content from each document
+    for doc_name, doc_data in documents.items():
+        # Fetch relevant sections, tables, and figures
+        relevant_pages = fetch_page(doc_data, question)
+        relevant_sections = fetch_sections(doc_data, question)
+        relevant_tables = fetch_table(doc_data, question)
+        relevant_figures = fetch_figures(doc_data, question)
+
+        # Collect relevant content
+        for page in relevant_pages:
+            structured_relevant_content["page_numbers"].append(page["page_number"])
+            structured_relevant_content["headings_and_paragraphs"].append({
+                "heading": page["heading"],
+                "paragraph": page["paragraph"]
+            })
+
+        for section in relevant_sections:
+            structured_relevant_content["page_numbers"].append(section["page_number"])
+            structured_relevant_content["summaries"].append(section["full_text"])
+
+        for table in relevant_tables:
+            structured_relevant_content["page_numbers"].append(table["page_number"])
+            structured_relevant_content["tables"].append(table["table"])
+
+        for figure in relevant_figures:
+            structured_relevant_content["page_numbers"].append(figure["page_number"])
+            structured_relevant_content["figures"].append(figure["explanation"])
+
+    # Construct prompt message using the structured relevant content
+    prompt_message = (
+        f"""
+    You have the following relevant content to answer the question:
+
+    ---
+    Page Numbers: {structured_relevant_content['page_numbers']}
+    
+    Summaries: {structured_relevant_content['summaries']}
+    
+    Headings and Paragraphs: {structured_relevant_content['headings_and_paragraphs']}
+    
+    Tables: {structured_relevant_content['tables']}
+    
+    Figures: {structured_relevant_content['figures']}
+    ---
+    
+    Question: {question}
+    """
+    )
+
+    # LLM interaction to get the answer
+    headers = get_headers()
+    data = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are an assistant that answers questions based on the provided relevant content."},
             {"role": "user", "content": prompt_message}
         ],
         "temperature": 0.0
@@ -380,10 +483,11 @@ def ask_question(documents, question, chat_history):
         response = requests.post(
             f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
             headers=headers,
-            json=final_data,
-            timeout=60  # Add timeout for API request
+            json=data,
+            timeout=60
         )
         response.raise_for_status()
+
         return response.json().get('choices', [{}])[0].get('message', {}).get('content', "No answer provided.").strip()
 
     except requests.exceptions.RequestException as e:
