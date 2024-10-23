@@ -9,6 +9,7 @@ import random
 import re
 import nltk
 from nltk.corpus import stopwords
+import json
 # Set up logging
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -141,11 +142,9 @@ def llm_extract_sections_paragraphs_tables(text):
         )
         response.raise_for_status()  # Check for HTTP errors.
         prompt_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "")
-        
-        # Assuming the response is a JSON-like structure
-        structured_output = eval(prompt_response.strip())  # Safely convert the response into a Python dictionary.
-
-        return structured_output
+        prompt_res = prompt_response.strip()
+        json_data = json.loads(prompt_res)
+        return json_data
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Error during LLM extraction of sections and tables: {e}")
