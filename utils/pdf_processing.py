@@ -77,11 +77,15 @@ def process_page_batch(pdf_document, batch, system_prompt, ocr_text_threshold=0.
                 image_explanation = get_image_explanation(image_data)
                 image_analysis.append({"page_number": page_number + 1, "explanation": image_explanation})
 
-            # Store the extracted data, including the text
+            # Extract sections, headings, paragraphs, and tables using the LLM
+            structured_data = llm_extract_sections_paragraphs_tables(text)  # Assuming this includes tables and figures
+
+            # Store the extracted data, including the structured JSON
             batch_data.append({
                 "page_number": page_number + 1,
-                "full_text": text,  # Adding full text to batch data
-                "text_summary": summary,  
+                "full_text": text,
+                "text_summary": summary,
+                "structured_data": structured_data,  # Include structured data
                 "image_analysis": image_analysis
             })
 
@@ -91,6 +95,7 @@ def process_page_batch(pdf_document, batch, system_prompt, ocr_text_threshold=0.
                 "page_number": page_number + 1,
                 "full_text": "",  # Include empty text in case of an error
                 "text_summary": "Error in processing this page",
+                "structured_data": {},  # Empty structured data in case of an error
                 "image_analysis": []
             })
 
@@ -126,7 +131,7 @@ def process_pdf_pages(uploaded_file, first_file=False):
             first_200_words = ' '.join(full_text.split()[:200])
             generated_system_prompt = generate_system_prompt(first_200_words)
 
-        # Batch size of 10 pages
+        # Batch size of 5 pages
         batch_size = 5
         page_batches = [range(i, min(i + batch_size, total_pages)) for i in range(0, total_pages, batch_size)]
         
