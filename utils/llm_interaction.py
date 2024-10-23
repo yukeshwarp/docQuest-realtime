@@ -364,7 +364,7 @@ def fetch_table(doc_data, question):
 
     for page in doc_data["pages"]:
         page_number = page["page_number"]
-        structured_data = page["structured_data"][0]
+        structured_data = page["structured_data"]['sections']
 
         for table in structured_data["tables"]:
             # Construct prompt for LLM to check relevance
