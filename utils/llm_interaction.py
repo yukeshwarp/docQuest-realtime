@@ -93,9 +93,9 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
 import requests
 import logging
 
-def llm_error_maybe(sani_text):
-    headers = header
-    preprocessed_text = preprocess_text(sani_text)
+def llm_extract_sections_paragraphs_tables(text):
+    headers = get_headers()
+    preprocessed_text = preprocess_text(text)
     data = {
         "model": model,
         "messages": [
