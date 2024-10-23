@@ -411,7 +411,7 @@ def ask_question(documents, question, chat_history):
     """Answer a question based on relevant content from multiple PDFs and chat history."""
     combined_content = []
     structured_relevant_content = {
-        "page_numbers": [],
+        "page_number": [],
         "summaries": [],
         "headings_and_paragraphs": [],
         "tables": [],
