@@ -332,7 +332,7 @@ def fetch_page(doc_data, question="basic placeholer"):
                     relevance_prompt = f"Is the following paragraph relevant to the question: '{question}'? Paragraph: '{paragraph}'"
                     if llm_check_relevance(relevance_prompt):
                         relevant_content.append({
-                            "page_number": page_number,
+                            "page_number": int(page_number),
                             "heading": heading,
                             "paragraph": paragraph
                         })
@@ -354,7 +354,7 @@ def fetch_sections(doc_data, question):
         # Call LLM with relevance check
         if llm_check_relevance(relevance_prompt):
             relevant_texts.append({
-                "page_number": page_number,
+                "page_number": int(page_number),
                 "full_text": page["full_text"]  # Return the full text of the page
             })
 
@@ -379,7 +379,7 @@ def fetch_table(doc_data, question):
                         # Call LLM with relevance check
                         if llm_check_relevance(relevance_prompt):
                             relevant_tables.append({
-                                "page_number": page_number,
+                                "page_number": int(page_number),
                                 "table": table  # Return the table content
                             })
 
@@ -401,7 +401,7 @@ def fetch_figures(doc_data, question):
             # Call LLM with relevance check
             if llm_check_relevance(relevance_prompt):
                 relevant_figures.append({
-                    "page_number": page_number,
+                    "page_number": int(page_number),
                     "explanation": image["explanation"]  # Return the image explanation
                 })
 
