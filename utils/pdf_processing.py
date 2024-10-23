@@ -1,7 +1,7 @@
 import fitz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.file_conversion import convert_office_to_pdf
-from utils.llm_interaction import summarize_page, get_image_explanation, generate_system_prompt
+from utils.llm_interaction import summarize_page, get_image_explanation, generate_system_prompt, llm_extract_sections_paragraphs_tables
 import io
 import base64
 import logging
