@@ -314,7 +314,7 @@ def llm_check_relevance(prompt):
         return False  # Return False in case of an error
 
 
-def fetch_pages(doc_data, question="basic placeholer"):
+def fetch_page(doc_data, question="basic placeholer"):
     relevant_content = []
 
     for page in doc_data["pages"]:
