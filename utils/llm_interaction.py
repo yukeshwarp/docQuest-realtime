@@ -421,23 +421,27 @@ def ask_question(documents, question, chat_history):
 
         # Collect relevant content
         for page in relevant_pages:
-            structured_relevant_content["page_numbers"].append(page["page_number"])
+            if "page_number" in page:  # Check if page_number exists
+                structured_relevant_content["page_numbers"].append(page["page_number"])
             structured_relevant_content["headings_and_paragraphs"].append({
-                "heading": page["heading"],
-                "paragraph": page["paragraph"]
+                "heading": page.get("heading", "No Heading"),  # Use default value if missing
+                "paragraph": page.get("paragraph", "No Paragraph")
             })
 
         for section in relevant_sections:
-            structured_relevant_content["page_numbers"].append(section["page_number"])
-            structured_relevant_content["summaries"].append(section["full_text"])
+            if "page_number" in section:  # Check if page_number exists
+                structured_relevant_content["page_numbers"].append(section["page_number"])
+            structured_relevant_content["summaries"].append(section.get("full_text", "No Full Text"))
 
         for table in relevant_tables:
-            structured_relevant_content["page_numbers"].append(table["page_number"])
-            structured_relevant_content["tables"].append(table["table"])
+            if "page_number" in table:  # Check if page_number exists
+                structured_relevant_content["page_numbers"].append(table["page_number"])
+            structured_relevant_content["tables"].append(table.get("table", "No Table Data"))
 
         for figure in relevant_figures:
-            structured_relevant_content["page_numbers"].append(figure["page_number"])
-            structured_relevant_content["figures"].append(figure["explanation"])
+            if "page_number" in figure:  # Check if page_number exists
+                structured_relevant_content["page_numbers"].append(figure["page_number"])
+            structured_relevant_content["figures"].append(figure.get("explanation", "No Explanation"))
 
     # Construct prompt message using the structured relevant content
     prompt_message = (
