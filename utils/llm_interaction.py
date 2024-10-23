@@ -314,29 +314,31 @@ def llm_check_relevance(prompt):
         return False  # Return False in case of an error
 
 
-def fetch_page(doc_data, question):
-    """Check relevance of paragraphs in each page and retrieve relevant headings and paragraphs."""
+def fetch_pages(doc_data, question="basic placeholer"):
     relevant_content = []
 
     for page in doc_data["pages"]:
+
         page_number = page["page_number"]
         structured_data = page["structured_data"]
 
-        for section in structured_data["sections"]:
-            heading = "placeholder"
-            for paragraph in section["paragraphs"]:
-                # Construct prompt for LLM to check relevance
-                relevance_prompt = f"Is the following paragraph relevant to the question: '{question}'? Paragraph: '{paragraph}'"
+        if 'sections' in structured_data.keys():
 
-                # Call LLM with relevance check
-                if llm_check_relevance(relevance_prompt):
-                    relevant_content.append({
-                        "page_number": page_number,
-                        "heading": heading,
-                        "paragraph": paragraph
-                    })
+            for section in structured_data['sections']:
+                if 'heading' in section.keys():
+                    heading = section["heading"]
+                
+                for paragraph in section["paragraphs"]:
+                    relevance_prompt = f"Is the following paragraph relevant to the question: '{question}'? Paragraph: '{paragraph}'"
+                    if llm_check_relevance(relevance_prompt):
+                        relevant_content.append({
+                            "page_number": page_number,
+                            "heading": heading,
+                            "paragraph": paragraph
+                        })
+                    
+    return relevance_prompt
 
-    return relevant_content
 
 def fetch_sections(doc_data, question):
     """Check relevance of page summaries and return full text if relevant."""
@@ -359,25 +361,30 @@ def fetch_sections(doc_data, question):
     return relevant_texts
 
 def fetch_table(doc_data, question):
-    """Check relevance of tables and return page number and table content if relevant."""
+
     relevant_tables = []
 
     for page in doc_data["pages"]:
         page_number = page["page_number"]
-        structured_data = page["structured_data"]['sections']
+        structured_data = page["structured_data"]
+        
+        if 'sections' in structured_data.keys():
+            for section in structured_data['sections']:
+                
+                if 'tables' in section.keys():
+                    for table in section["tables"]:
+                        # Construct prompt for LLM to check relevance
+                        relevance_prompt = f"Does this table contain relevant data for the question: '{question}'? Table: {table}"
 
-        for table in structured_data["tables"]:
-            # Construct prompt for LLM to check relevance
-            relevance_prompt = f"Does this table contain relevant data for the question: '{question}'? Table: {table}"
-
-            # Call LLM with relevance check
-            if llm_check_relevance(relevance_prompt):
-                relevant_tables.append({
-                    "page_number": page_number,
-                    "table": table  # Return the table content
-                })
+                        # Call LLM with relevance check
+                        if llm_check_relevance(relevance_prompt):
+                            relevant_tables.append({
+                                "page_number": page_number,
+                                "table": table  # Return the table content
+                            })
 
     return relevant_tables
+
 
 def fetch_figures(doc_data, question):
     """Check relevance of image explanations and return page number and image explanation if relevant."""
