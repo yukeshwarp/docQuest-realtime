@@ -19,14 +19,15 @@ generated_system_prompt = None
 
 def remove_stopwords_and_blanks(text):
     """Preprocess text by removing stopwords, punctuation, and extra blank spaces."""
-    # Remove punctuation
-    text = text.translate(str.maketrans('', '', string.punctuation))
-    
-    # Remove stopwords and extra spaces
-    filtered_text = ' '.join([word for word in text.split() if word.lower() not in stop_words])
-    
-    # Remove multiple spaces
-    return ' '.join(filtered_text.split())
+    # Remove punctuation and extra spaces
+    text = text.translate(str.maketrans('', '', string.punctuation)).strip()
+    filtered_text = ' '.join([word for word in text.split() if word.lower() not in stop_words and word])
+    return filtered_text
+
+def sanitize_text(text):
+    """Sanitize text to ensure it doesn't contain problematic characters."""
+    text = text.replace("'", "\\'").replace('"', '\\"')
+    return text
 
 def detect_ocr_images_and_vector_graphics_in_pdf(page, ocr_text_threshold=0.4):
     """Detect OCR images or vector graphics on a given PDF page."""
@@ -62,12 +63,14 @@ def process_page_batch(pdf_document, batch, system_prompt, ocr_text_threshold=0.
         try:
             page = pdf_document.load_page(page_number)
             text = page.get_text("text").strip()
+            logging.debug(f"Extracted text from page {page_number + 1}: {text[:100]}...")  # Log the first 100 characters
             summary = ""
             
             # Summarize the page after preprocessing
             if text != "":
                 preprocessed_text = remove_stopwords_and_blanks(text)
-                summary = summarize_page(preprocessed_text, previous_summary, page_number + 1, system_prompt)
+                sanitized_text = sanitize_text(preprocessed_text)  # Sanitize the text
+                summary = summarize_page(sanitized_text, previous_summary, page_number + 1, system_prompt)
                 previous_summary = summary
             
             # Detect images or vector graphics
@@ -78,7 +81,7 @@ def process_page_batch(pdf_document, batch, system_prompt, ocr_text_threshold=0.
                 image_analysis.append({"page_number": page_number + 1, "explanation": image_explanation})
 
             # Extract sections, headings, paragraphs, and tables using the LLM
-            structured_data = llm_extract_sections_paragraphs_tables(text)  # Assuming this includes tables and figures
+            structured_data = llm_extract_sections_paragraphs_tables(sanitized_text)  # Assuming this includes tables and figures
 
             # Store the extracted data, including the structured JSON
             batch_data.append({
@@ -90,7 +93,7 @@ def process_page_batch(pdf_document, batch, system_prompt, ocr_text_threshold=0.
             })
 
         except Exception as e:
-            logging.error(f"Error processing page {page_number + 1}: {e}")
+            logging.error(f"Error processing page {page_number + 1}: {str(e)} (Type: {type(e).__name__})")
             batch_data.append({
                 "page_number": page_number + 1,
                 "full_text": "",  # Include empty text in case of an error
@@ -143,7 +146,7 @@ def process_pdf_pages(uploaded_file, first_file=False):
                     batch_data = future.result()  # Get the result of processed batch
                     document_data["pages"].extend(batch_data)
                 except Exception as e:
-                    logging.error(f"Error processing batch: {e}")
+                    logging.error(f"Error processing batch: {str(e)} (Type: {type(e).__name__})")
 
         # Close the PDF document after processing
         pdf_document.close()
@@ -153,5 +156,5 @@ def process_pdf_pages(uploaded_file, first_file=False):
         return document_data
 
     except Exception as e:
-        logging.error(f"Error processing PDF file {file_name}: {e}")
-        raise ValueError(f"Unable to process the file {file_name}. Error: {e}")
+        logging.error(f"Error processing PDF file {file_name}: {str(e)} (Type: {type(e).__name__})")
+        raise ValueError(f"Unable to process the file {file_name}. Error: {str(e)}")
