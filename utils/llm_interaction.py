@@ -428,22 +428,22 @@ def ask_question(documents, question, chat_history):
 
         # Collect relevant content
         for page in relevant_pages:
-            structured_relevant_content["page_numbers"].append(page["page_number"])
+            structured_relevant_content["page_number"].append(page["page_number"])
             structured_relevant_content["headings_and_paragraphs"].append({
                 "heading": page["heading"],
                 "paragraph": page["paragraph"]
             })
 
         for section in relevant_sections:
-            structured_relevant_content["page_numbers"].append(section["page_number"])
+            structured_relevant_content["page_number"].append(section["page_number"])
             structured_relevant_content["summaries"].append(section["full_text"])
 
         for table in relevant_tables:
-            structured_relevant_content["page_numbers"].append(table["page_number"])
+            structured_relevant_content["page_number"].append(table["page_number"])
             structured_relevant_content["tables"].append(table["table"])
 
         for figure in relevant_figures:
-            structured_relevant_content["page_numbers"].append(figure["page_number"])
+            structured_relevant_content["page_number"].append(figure["page_number"])
             structured_relevant_content["figures"].append(figure["explanation"])
 
     # Construct prompt message using the structured relevant content
