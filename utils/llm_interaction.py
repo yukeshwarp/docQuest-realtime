@@ -314,21 +314,18 @@ def llm_check_relevance(prompt):
         return False  # Return False in case of an error
 
 
-def fetch_page(doc_data, question="basic placeholer"):
+def fetch_page(doc_data, question="basic placeholder"):
     relevant_content = []
 
     for page in doc_data["pages"]:
-
         page_number = page["page_number"]
-        structured_data = page["structured_data"]
+        structured_data = page.get("structured_data", {})
 
         if 'sections' in structured_data.keys():
-
             for section in structured_data['sections']:
-                if 'heading' in section.keys():
-                    heading = section["heading"]
+                heading = section.get("heading", "No Heading")
                 
-                for paragraph in section["paragraphs"]:
+                for paragraph in section.get("paragraphs", []):
                     relevance_prompt = f"Is the following paragraph relevant to the question: '{question}'? Paragraph: '{paragraph}'"
                     if llm_check_relevance(relevance_prompt):
                         relevant_content.append({
@@ -337,7 +334,7 @@ def fetch_page(doc_data, question="basic placeholer"):
                             "paragraph": paragraph
                         })
                     
-    return relevance_prompt
+    return relevant_content  # Return relevant content, not prompt
 
 
 def fetch_sections(doc_data, question):
@@ -346,7 +343,7 @@ def fetch_sections(doc_data, question):
 
     for page in doc_data["pages"]:
         page_number = page["page_number"]
-        page_summary = page["text_summary"]
+        page_summary = page.get("text_summary", "")
 
         # Construct prompt for LLM to check relevance
         relevance_prompt = f"Is the following page summary relevant to the question: '{question}'? Summary: '{page_summary}'"
@@ -355,33 +352,30 @@ def fetch_sections(doc_data, question):
         if llm_check_relevance(relevance_prompt):
             relevant_texts.append({
                 "page_number": int(page_number),
-                "full_text": page["full_text"]  # Return the full text of the page
+                "full_text": page.get("full_text", "")  # Return the full text of the page
             })
 
     return relevant_texts
 
 def fetch_table(doc_data, question):
-
     relevant_tables = []
 
     for page in doc_data["pages"]:
         page_number = page["page_number"]
-        structured_data = page["structured_data"]
+        structured_data = page.get("structured_data", {})
         
         if 'sections' in structured_data.keys():
             for section in structured_data['sections']:
-                
-                if 'tables' in section.keys():
-                    for table in section["tables"]:
-                        # Construct prompt for LLM to check relevance
-                        relevance_prompt = f"Does this table contain relevant data for the question: '{question}'? Table: {table}"
+                for table in section.get("tables", []):
+                    # Construct prompt for LLM to check relevance
+                    relevance_prompt = f"Does this table contain relevant data for the question: '{question}'? Table: {table}"
 
-                        # Call LLM with relevance check
-                        if llm_check_relevance(relevance_prompt):
-                            relevant_tables.append({
-                                "page_number": int(page_number),
-                                "table": table  # Return the table content
-                            })
+                    # Call LLM with relevance check
+                    if llm_check_relevance(relevance_prompt):
+                        relevant_tables.append({
+                            "page_number": int(page_number),
+                            "table": table  # Return the table content
+                        })
 
     return relevant_tables
 
@@ -392,7 +386,7 @@ def fetch_figures(doc_data, question):
 
     for page in doc_data["pages"]:
         page_number = page["page_number"]
-        image_analysis = page["image_analysis"]
+        image_analysis = page.get("image_analysis", [])
 
         for image in image_analysis:
             # Construct prompt for LLM to check relevance
@@ -409,9 +403,8 @@ def fetch_figures(doc_data, question):
 
 def ask_question(documents, question, chat_history):
     """Answer a question based on relevant content from multiple PDFs and chat history."""
-    combined_content = []
     structured_relevant_content = {
-        "page_number": [],
+        "page_numbers": [],
         "summaries": [],
         "headings_and_paragraphs": [],
         "tables": [],
@@ -428,22 +421,22 @@ def ask_question(documents, question, chat_history):
 
         # Collect relevant content
         for page in relevant_pages:
-            structured_relevant_content["page_number"].append(page["page_number"])
+            structured_relevant_content["page_numbers"].append(page["page_number"])
             structured_relevant_content["headings_and_paragraphs"].append({
                 "heading": page["heading"],
                 "paragraph": page["paragraph"]
             })
 
         for section in relevant_sections:
-            structured_relevant_content["page_number"].append(section["page_number"])
+            structured_relevant_content["page_numbers"].append(section["page_number"])
             structured_relevant_content["summaries"].append(section["full_text"])
 
         for table in relevant_tables:
-            structured_relevant_content["page_number"].append(table["page_number"])
+            structured_relevant_content["page_numbers"].append(table["page_number"])
             structured_relevant_content["tables"].append(table["table"])
 
         for figure in relevant_figures:
-            structured_relevant_content["page_number"].append(figure["page_number"])
+            structured_relevant_content["page_numbers"].append(figure["page_number"])
             structured_relevant_content["figures"].append(figure["explanation"])
 
     # Construct prompt message using the structured relevant content
