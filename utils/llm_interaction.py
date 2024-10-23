@@ -93,20 +93,13 @@ def get_image_explanation(base64_image, retries=5, initial_delay=2):
 import requests
 import logging
 
-def llm_extract_sections_paragraphs_tables(text):
-    """
-    Use Azure LLM to extract sections, headings, paragraphs, and tables from the given text.
-    
-    :param text: The full text content of a PDF page or a section of a document.
-    :return: A structured JSON object containing sections, headings, paragraphs, and tables.
-    """
-    headers = get_headers()  # This function should return the necessary headers for Azure API requests.
-    preprocessed_text = preprocess_text(text)  # Optional: preprocess text before sending to the model.
-    
+def llm_error_maybe(sani_text):
+    headers = header
+    preprocessed_text = preprocess_text(sani_text)
     data = {
-        "model": model,  # Use your Azure OpenAI model deployment ID.
+        "model": model,
         "messages": [
-            {"role": "system", "content": "You are an expert in document structure analysis."},
+            {"role": "system", "content": "You are an expert in document structure analysis. Don't provide any other addon text to the output provide only the structure and dont provide the format name of the structure in the response."},
             {"role": "user", "content":
              f"""
              You are provided with the following document text. Based on its content, extract and identify the following details:
@@ -135,24 +128,24 @@ def llm_extract_sections_paragraphs_tables(text):
 
     try:
         response = requests.post(
-            f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
-            headers=headers,
-            json=data,
-            timeout=20
-        )
+                f"{azure_endpoint}/openai/deployments/{model}/chat/completions?api-version={api_version}",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+        
         response.raise_for_status()  # Check for HTTP errors.
         prompt_response = response.json().get('choices', [{}])[0].get('message', {}).get('content', "")
         prompt_res = prompt_response.strip()
         json_data = json.loads(prompt_res)
         return json_data
-
+    
     except requests.exceptions.RequestException as e:
         logging.error(f"Error during LLM extraction of sections and tables: {e}")
         return {
             "sections": [],
             "tables": []
         }
-
 
 def generate_system_prompt(document_content):
     """
